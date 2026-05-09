@@ -14,8 +14,8 @@ RUN yarn install --frozen-lockfile --ignore-scripts
 COPY prisma ./prisma
 COPY apps/api ./apps/api
 
-# Generate Prisma client
-RUN yarn workspace api exec npx prisma generate --schema=../../prisma/schema.prisma
+# Generate Prisma client (use local version, not npx download)
+RUN node_modules/.bin/prisma generate --schema=prisma/schema.prisma
 
 # Build NestJS
 RUN yarn workspace api build
@@ -35,8 +35,9 @@ COPY apps/api/package.json ./apps/api/
 RUN yarn install --frozen-lockfile --ignore-scripts --production
 
 COPY prisma ./prisma
-# Re-generate Prisma client for production node_modules
-RUN npx prisma generate --schema=prisma/schema.prisma
+
+# Copy already-generated Prisma client from builder (same Node version, no need to regenerate)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy compiled output from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
