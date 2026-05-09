@@ -1,0 +1,26 @@
+{
+  "name": "signalbot",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "apps/*",
+    "prisma"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "dev:api": "npm -w apps/api run start:dev",
+    "dev:web": "npm -w apps/web run dev",
+    "dev:mobile": "npm -w apps/mobile run ios",
+    "db:migrate": "npm -w prisma run migrate",
+    "db:generate": "npm -w prisma run generate",
+    "db:studio": "npm -w prisma run studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "react-native-worklets": "^0.8.3"
+  }
+}

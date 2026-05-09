@@ -1,0 +1,15 @@
+{
+  "name": "prisma-schema",
+  "private": true,
+  "scripts": {
+    "migrate": "prisma migrate dev",
+    "generate": "prisma generate",
+    "studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.14.0"
+  }
+}

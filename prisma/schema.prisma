@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LocationType {
+  STREET
+  LANDMARK
+  INTERSECTION
+  HIGHWAY
+  DISTRICT
+}
+
+enum IssueType {
+  TRAFFIC_JAM
+  ACCIDENT
+  ROAD_WORK
+  POLICE_CHECKPOINT
+  ROAD_CLOSURE
+  OTHER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  password         String
+  pushSubscription Json?
+  expoPushToken    String?
+  ttsEnabled       Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  routes           Route[]
+  notifications    Notification[]
+}
+
+model TelegramChannel {
+  id              String    @id @default(uuid())
+  channelUsername  String    @unique
+  name            String
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  messages        Message[]
+}
+
+model Message {
+  id                String           @id @default(uuid())
+  channel           TelegramChannel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId         String
+  telegramMessageId BigInt
+  text              String
+  locations         String[]         // extracted location names
+  issueType         IssueType?
+  severity          Severity         @default(MEDIUM)
+  analyzedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  notifications     Notification[]
+
+  @@unique([channelId, telegramMessageId])
+  @@index([createdAt])
+  @@index([locations])
+}
+
+model Route {
+  id            String          @id @default(uuid())
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  name          String
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  locations     RouteLocation[]
+  notifications Notification[]
+
+  @@index([userId])
+}
+
+model RouteLocation {
+  id         String       @id @default(uuid())
+  route      Route        @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId    String
+  name       String       // street name or landmark
+  nameNorm   String       // normalized for matching (lowercase, no diacritics)
+  type       LocationType @default(STREET)
+  orderIndex Int
+
+  @@index([nameNorm])
+  @@index([routeId])
+}
+
+model Notification {
+  id            String    @id @default(uuid())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  route         Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId       String
+  message       Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId     String
+  locationMatch String    // which location triggered the match
+  issueType     IssueType?
+  severity      Severity  @default(MEDIUM)
+  isRead        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
