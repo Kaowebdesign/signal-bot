@@ -2,16 +2,13 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Build tools needed to compile native modules (bcrypt uses node-gyp)
-RUN apk add --no-cache python3 make g++
-
 # Copy monorepo root manifests
 COPY package.json yarn.lock ./
 COPY prisma/package.json ./prisma/
 COPY apps/api/package.json ./apps/api/
 
-# Install all deps — no --ignore-scripts so native modules compile
-RUN yarn install --frozen-lockfile
+# Install all deps (needed for prisma generate + nest build)
+RUN yarn install --frozen-lockfile --ignore-scripts
 
 # Copy source
 COPY prisma ./prisma
@@ -41,9 +38,6 @@ COPY prisma ./prisma
 
 # Copy already-generated Prisma client from builder (same Node version, no need to regenerate)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-# Copy native bcrypt binary compiled in builder (--ignore-scripts skips its compilation)
-COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
 
 # Copy compiled output from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
