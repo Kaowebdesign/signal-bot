@@ -44,6 +44,9 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 # Copy compiled output from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
+COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh
+
 EXPOSE 3000
 
-CMD ["node", "apps/api/dist/main"]
+CMD ["./docker-entrypoint.sh"]
