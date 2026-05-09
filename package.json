@@ -11,6 +11,7 @@
     "build": "turbo build",
     "dev:api": "npm -w apps/api run start:dev",
     "dev:web": "npm -w apps/web run dev",
+    "deploy:web": "yarn workspace web build && node deploy.js",
     "dev:mobile": "npm -w apps/mobile run ios",
     "db:migrate": "npm -w prisma run migrate",
     "db:generate": "npm -w prisma run generate",
@@ -23,6 +24,7 @@
   "dependencies": {
     "@types/bcryptjs": "^3.0.0",
     "bcryptjs": "^3.0.3",
+    "ftp-deploy": "^2.4.7",
     "react-native-worklets": "^0.8.3"
   }
 }

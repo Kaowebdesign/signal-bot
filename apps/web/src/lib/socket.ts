@@ -4,7 +4,7 @@ let socket: Socket | null = null;
 
 export function getSocket(token: string): Socket {
   if (socket?.connected) return socket;
-  socket = io('/', {
+  socket = io(import.meta.env.VITE_API_URL ?? '/', {
     auth: { token },
     transports: ['polling', 'websocket'],
     path: '/socket.io',
