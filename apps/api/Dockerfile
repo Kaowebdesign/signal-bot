@@ -27,6 +27,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+RUN apk add --no-cache openssl
+
 COPY package.json yarn.lock ./
 COPY prisma/package.json ./prisma/
 COPY apps/api/package.json ./apps/api/
