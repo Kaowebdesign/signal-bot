@@ -1,6 +1,9 @@
 node_modules
 dist
 .env
+apps/web/.env
 *.log
 .turbo
 .prisma
+.expo/
+apps/mobile/.expo/
