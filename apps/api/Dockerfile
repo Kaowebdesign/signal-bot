@@ -39,6 +39,9 @@ COPY prisma ./prisma
 # Copy already-generated Prisma client from builder (same Node version, no need to regenerate)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
+# Copy native bcrypt binary compiled in builder (--ignore-scripts skips its compilation)
+COPY --from=builder /app/node_modules/bcrypt ./node_modules/bcrypt
+
 # Copy compiled output from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
