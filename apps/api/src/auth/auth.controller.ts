@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
+import { BotService } from '../bot/bot.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -20,6 +21,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly config: ConfigService,
+    private readonly bot: BotService,
   ) {}
 
   @Post('register')
@@ -48,5 +50,16 @@ export class AuthController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.authService.updateProfile(userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('telegram-link')
+  getTelegramLink(@CurrentUser('id') userId: string) {
+    const token = this.bot.generateLinkToken(userId);
+    const username = this.bot.getBotUsername();
+    const url = username
+      ? `https://t.me/${username}?start=${token}`
+      : null;
+    return { url, token };
   }
 }

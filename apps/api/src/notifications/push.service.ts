@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { BotService } from '../bot/bot.service';
 import { Prisma } from '@prisma/client';
 import * as webPush from 'web-push';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
@@ -13,6 +14,7 @@ export class PushService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly bot: BotService,
   ) {}
 
   onModuleInit() {
@@ -33,7 +35,7 @@ export class PushService implements OnModuleInit {
   async sendPush(userId: string, payload: Record<string, unknown>) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { pushSubscription: true, expoPushToken: true },
+      select: { pushSubscription: true, expoPushToken: true, telegramChatId: true },
     });
 
     if (!user) return;
@@ -55,6 +57,15 @@ export class PushService implements OnModuleInit {
           this.logger.error(`Web push failed for user ${userId}: ${error.message}`);
         }
       }
+    }
+
+    // Telegram bot
+    if (user.telegramChatId) {
+      const title = payload.title as string | undefined;
+      const body = payload.body as string | undefined;
+      const text = [title ? `<b>${title}</b>` : '', body ?? ''].filter(Boolean).join('\n');
+      await this.bot.sendMessage(user.telegramChatId, text);
+      this.logger.debug(`Telegram message sent to user ${userId}`);
     }
 
     // Expo push (mobile / Apple Watch)

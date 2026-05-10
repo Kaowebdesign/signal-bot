@@ -10,8 +10,8 @@ import {
   ToggleRight,
   MessageCircle,
   Bell,
-  BellOff,
   Watch,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -29,6 +29,13 @@ export function SettingsPage() {
   const [channelUsername, setChannelUsername] = useState('');
   const [channelName, setChannelName] = useState('');
   const { subscribe, isSubscribed, isSupported } = usePushSubscription();
+  const [telegramLinkUrl, setTelegramLinkUrl] = useState<string | null>(null);
+  const [telegramLinked, setTelegramLinked] = useState(false);
+
+  const { data: profile } = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => client.get('/api/auth/me').then(r => r.data),
+  });
 
   const { data: channels = [] } = useQuery({
     queryKey: ['channels'],
@@ -187,6 +194,57 @@ export function SettingsPage() {
               Підключити push-сповіщення
             </button>
           </div>
+        )}
+      </div>
+
+      {/* Telegram Bot */}
+      <div className="card">
+        <div className="mb-4 flex items-center gap-2">
+          <Send className="h-5 w-5 text-blue-500" />
+          <h2 className="text-lg font-semibold text-gray-900">Telegram-бот</h2>
+        </div>
+
+        {profile?.telegramChatId || telegramLinked ? (
+          <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+            <Bell className="h-5 w-5 text-green-500" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Telegram підключено ✓</p>
+              <p className="text-xs text-green-600">Сповіщення надходять у Telegram паралельно з іншими каналами.</p>
+            </div>
+          </div>
+        ) : telegramLinkUrl ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">Натисни кнопку нижче — відкриється бот. Він автоматично прив'яже акаунт.</p>
+            <a
+              href={telegramLinkUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setTelegramLinked(true)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Send className="h-4 w-4" />
+              Відкрити бота в Telegram
+            </a>
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              try {
+                const { data } = await client.get('/api/auth/telegram-link');
+                if (data.url) {
+                  setTelegramLinkUrl(data.url);
+                } else {
+                  toast.error('Бот ще не запущений, перевір TELEGRAM_BOT_TOKEN');
+                }
+              } catch {
+                toast.error('Помилка отримання посилання');
+              }
+            }}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Send className="h-4 w-4" />
+            Підключити Telegram-бота
+          </button>
         )}
       </div>
 

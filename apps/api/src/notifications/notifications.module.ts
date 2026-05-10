@@ -5,9 +5,11 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { PushService } from './push.service';
+import { BotModule } from '../bot/bot.module';
 
 @Module({
   imports: [
+    BotModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

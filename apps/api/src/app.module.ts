@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { BotModule } from './bot/bot.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { RoutesModule } from './routes/routes.module';
@@ -13,6 +14,7 @@ import { NotificationsModule } from './notifications/notifications.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
     PrismaModule,
+    BotModule,
     AuthModule,
     TelegramModule,
     AnalysisModule,

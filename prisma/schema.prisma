@@ -38,6 +38,7 @@ model User {
   password         String
   pushSubscription Json?
   expoPushToken    String?
+  telegramChatId   String?
   ttsEnabled       Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
