@@ -6,8 +6,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'SignalBot';
   const options = {
     body: data.body || 'Нове сповіщення',
-    icon: data.icon || '/favicon.ico',
-    badge: data.badge || '/favicon.ico',
+    icon: data.icon || '/icon-192x192.png',
+    badge: data.badge || '/icon-96x96.png',
     data: data.url || '/',
   };
 

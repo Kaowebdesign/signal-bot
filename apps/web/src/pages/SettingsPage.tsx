@@ -176,7 +176,8 @@ export function SettingsPage() {
                 try {
                   await subscribe();
                   toast.success('Push-сповіщення підключено!');
-                } catch {
+                } catch (err) {
+                  console.error('Push subscribe error:', err);
                   toast.error('Не вдалося підключити сповіщення');
                 }
               }}

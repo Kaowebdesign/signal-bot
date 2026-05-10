@@ -209,7 +209,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── Bottom tab bar (mobile only) ── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-gray-200 bg-white lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-gray-200 bg-white lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {navItems.map((item) => (
           <NavLink
             key={item.to}

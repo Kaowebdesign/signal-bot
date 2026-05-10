@@ -36,5 +36,5 @@ export async function deleteAllNotifications(): Promise<void> {
 }
 
 export async function subscribePush(subscription: PushSubscription): Promise<void> {
-  await client.post('/api/notifications/push-subscribe', subscription.toJSON());
+  await client.post('/api/notifications/subscribe', subscription.toJSON());
 }
