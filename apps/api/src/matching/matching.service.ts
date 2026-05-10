@@ -83,6 +83,11 @@ export class MatchingService implements OnModuleInit {
     return keyword.slice(0, -2);
   }
 
+  @OnEvent('routes.changed')
+  async onRoutesChanged() {
+    await this.rebuildIndex();
+  }
+
   @OnEvent('message.analyzed')
   async matchMessage(message: AnalyzedMessage) {
     const { id: messageId, issueType, severity, text } = message;

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
@@ -21,12 +22,15 @@ function normalizeLocationName(name: string): string {
 
 @Injectable()
 export class RoutesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   private readonly locationOrder = { locations: { orderBy: { orderIndex: 'asc' as const } } };
 
   async create(userId: string, dto: CreateRouteDto) {
-    return this.prisma.route.create({
+    const route = await this.prisma.route.create({
       data: {
         userId,
         name: dto.name,
@@ -41,6 +45,8 @@ export class RoutesService {
       },
       include: this.locationOrder,
     });
+    this.eventEmitter.emit('routes.changed');
+    return route;
   }
 
   async findAllByUser(userId: string) {
@@ -92,18 +98,22 @@ export class RoutesService {
       };
     }
 
-    return this.prisma.route.update({
+    const updated = await this.prisma.route.update({
       where: { id },
       data,
       include: this.locationOrder,
     });
+    this.eventEmitter.emit('routes.changed');
+    return updated;
   }
 
   async remove(userId: string, id: string) {
     await this.findOne(userId, id);
-    return this.prisma.route.delete({
+    const deleted = await this.prisma.route.delete({
       where: { id },
       include: this.locationOrder,
     });
+    this.eventEmitter.emit('routes.changed');
+    return deleted;
   }
 }
