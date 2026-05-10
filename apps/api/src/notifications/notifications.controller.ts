@@ -67,7 +67,7 @@ export class NotificationsController {
   @Post('subscribe')
   async subscribe(
     @CurrentUser('id') userId: string,
-    @Body('subscription') subscription: Record<string, unknown>,
+    @Body() subscription: Record<string, unknown>,
   ) {
     await this.prisma.user.update({
       where: { id: userId },
