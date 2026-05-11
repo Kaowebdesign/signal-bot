@@ -72,6 +72,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Telegram client connected');
       this.setupMessageHandler();
       await this.subscribeToChannels();
+      // Force GramJS to load all dialogs so channel pts are initialized.
+      // Without this, channels where USER_ALREADY_PARTICIPANT is returned
+      // by JoinChannel will not receive message updates after a restart.
+      try {
+        await this.client.getDialogs({ limit: 100 });
+        this.logger.log('Telegram dialogs loaded — channel pts initialized');
+      } catch (err) {
+        this.logger.warn(`Could not load dialogs: ${err}`);
+      }
     } catch (error) {
       this.logger.error('Failed to connect Telegram client', error);
       this.connected = false;
@@ -186,7 +195,18 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       const chatId = chat.id.toString();
       const username = 'username' in chat ? '@' + (chat as any).username : chatId;
-      const dbChannelId = this.chatIdToChannelId.get(chatId);
+
+      // Channels/supergroups may arrive with -100 prefixed ID in some GramJS versions
+      const chatIdAlt = chatId.startsWith('-100')
+        ? chatId.slice(4)
+        : `-100${chatId}`;
+      const dbChannelId =
+        this.chatIdToChannelId.get(chatId) ??
+        this.chatIdToChannelId.get(chatIdAlt);
+
+      this.logger.log(
+        `[MSG] chatId=${chatId} username=${username} matched=${!!dbChannelId} text="${(text ?? '').slice(0, 40)}"`,
+      );
 
       if (!text || text.trim().length === 0) {
         if (dbChannelId) {
