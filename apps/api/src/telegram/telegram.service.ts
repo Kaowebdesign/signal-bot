@@ -14,7 +14,7 @@ import { NewMessage, NewMessageEvent } from 'telegram/events';
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramService.name);
-  private client: TelegramClient;
+  private client!: TelegramClient;
   private connected = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -175,20 +175,24 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const message = event.message;
       const text = message.text;
 
-      if (!text || text.trim().length === 0) {
-        return;
-      }
-
       const chat = await message.getChat();
       if (!chat) {
         return;
       }
 
       const chatId = chat.id.toString();
+      const username = 'username' in chat ? '@' + (chat as any).username : chatId;
       const dbChannelId = this.chatIdToChannelId.get(chatId);
 
+      if (!text || text.trim().length === 0) {
+        if (dbChannelId) {
+          this.logger.debug(`Media/empty message from ${username} — skipped (no text)`);
+        }
+        return;
+      }
+
       this.logger.debug(
-        `Message from chatId=${chatId} (${'username' in chat ? '@' + (chat as any).username : 'no username'}): "${text.slice(0, 60)}..."`,
+        `Message from ${username}: "${text.slice(0, 60)}..."`,
       );
 
       if (!dbChannelId) {
