@@ -98,12 +98,29 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     });
 
     for (const channel of channels) {
-      await this.subscribeToChannel(channel.channelUsername, channel.id);
+      await this.joinAndSubscribe(channel.channelUsername, channel.id);
     }
 
     this.logger.log(
       `Subscribed to ${this.chatIdToChannelId.size} channel(s)`,
     );
+  }
+
+  private async joinAndSubscribe(username: string, dbChannelId: string) {
+    try {
+      const { Api } = await import('telegram/tl');
+      await this.client.invoke(
+        new Api.channels.JoinChannel({ channel: username }),
+      );
+      this.logger.log(`Joined @${username}`);
+    } catch (error: any) {
+      // USER_ALREADY_PARTICIPANT is expected and fine
+      if (!String(error).includes('USER_ALREADY_PARTICIPANT')) {
+        this.logger.warn(`Could not join @${username}: ${error}`);
+      }
+    }
+
+    await this.subscribeToChannel(username, dbChannelId);
   }
 
   private async subscribeToChannel(username: string, dbChannelId: string) {
@@ -130,25 +147,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    try {
-      await this.client.invoke(
-        new (await import('telegram/tl')).Api.channels.JoinChannel({
-          channel: username,
-        }),
-      );
-      this.logger.log(`Joined channel @${username}`);
-    } catch (error) {
-      this.logger.warn(
-        `Could not join @${username} (may already be a member): ${error}`,
-      );
-    }
-
     const channel = await this.prisma.telegramChannel.findUnique({
       where: { channelUsername: username },
     });
 
     if (channel) {
-      await this.subscribeToChannel(username, channel.id);
+      await this.joinAndSubscribe(username, channel.id);
     }
   }
 
