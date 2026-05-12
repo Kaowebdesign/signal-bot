@@ -181,6 +181,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       },
       new NewMessage({}),
     );
+
+    // Raw update handler — logs ANY update type to verify GramJS is receiving data
+    this.client.addEventHandler((update: any) => {
+      const typeName = update?.className ?? update?.constructor?.name ?? typeof update;
+      if (typeName && !typeName.includes('UpdateUserStatus') && !typeName.includes('Raw')) {
+        this.logger.debug(`[RAW UPDATE] ${typeName}`);
+      }
+    });
   }
 
   private async handleNewMessage(event: NewMessageEvent) {
@@ -188,8 +196,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const message = event.message;
       const text = message.text;
 
+      // Log immediately so we know the handler fired even before getChat()
+      const rawPeerId = (message as any).peerId ?? (message as any).chatId;
+      this.logger.log(`[HANDLER] peerId=${JSON.stringify(rawPeerId)} text="${(text ?? '').slice(0, 40)}"`);
+
       const chat = await message.getChat();
       if (!chat) {
+        this.logger.warn(`[HANDLER] getChat() returned null for peerId=${JSON.stringify(rawPeerId)}`);
         return;
       }
 
