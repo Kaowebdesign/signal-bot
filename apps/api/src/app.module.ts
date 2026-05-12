@@ -9,6 +9,7 @@ import { RoutesModule } from './routes/routes.module';
 import { ChannelsModule } from './channels/channels.module';
 import { MatchingModule } from './matching/matching.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { StatsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ChannelsModule,
     MatchingModule,
     NotificationsModule,
+    StatsModule,
   ],
 })
 export class AppModule {}

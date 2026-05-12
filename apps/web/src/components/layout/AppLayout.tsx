@@ -9,6 +9,7 @@ import {
   LogOut,
   Check,
   AlertTriangle,
+  BarChart2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -23,6 +24,7 @@ import type { Notification } from '../../types';
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Дашборд' },
   { to: '/routes', icon: MapPin, label: 'Маршрути' },
+  { to: '/stats', icon: BarChart2, label: 'Статистика' },
   { to: '/settings', icon: Settings, label: 'Налаштування' },
 ];
 

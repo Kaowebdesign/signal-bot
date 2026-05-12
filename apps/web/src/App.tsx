@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { RoutesPage } from './pages/RoutesPage';
 import { RouteDetailPage } from './pages/RouteDetailPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { StatsPage } from './pages/StatsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -52,6 +53,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <RouteDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stats"
+        element={
+          <ProtectedRoute>
+            <StatsPage />
           </ProtectedRoute>
         }
       />
