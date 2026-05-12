@@ -9,7 +9,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AnalysisService } from '../analysis/analysis.service';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
-import { NewMessage, NewMessageEvent } from 'telegram/events';
 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
@@ -17,11 +16,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private client!: TelegramClient;
   private connected = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   // chatId (string) → DB channel id
   private chatIdToChannelId = new Map<string, string>();
   // username → chatId (for status display)
   private usernameToChannelId = new Map<string, string>();
+  // dbChannelId → last processed message id (for deduplication)
+  private lastMessageIds = new Map<string, number>();
+  // dbChannelIds that completed their first poll (to skip replay on startup)
+  private initializedChannels = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -54,6 +58,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -70,17 +78,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       await this.client.connect();
       this.connected = true;
       this.logger.log('Telegram client connected');
-      this.setupMessageHandler();
       await this.subscribeToChannels();
-      // Force GramJS to load all dialogs so channel pts are initialized.
-      // Without this, channels where USER_ALREADY_PARTICIPANT is returned
-      // by JoinChannel will not receive message updates after a restart.
-      try {
-        await this.client.getDialogs({ limit: 100 });
-        this.logger.log('Telegram dialogs loaded — channel pts initialized');
-      } catch (err) {
-        this.logger.warn(`Could not load dialogs: ${err}`);
-      }
+      this.startPolling();
     } catch (error) {
       this.logger.error('Failed to connect Telegram client', error);
       this.connected = false;
@@ -123,7 +122,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       );
       this.logger.log(`Joined @${username}`);
     } catch (error: any) {
-      // USER_ALREADY_PARTICIPANT is expected and fine
       if (!String(error).includes('USER_ALREADY_PARTICIPANT')) {
         this.logger.warn(`Could not join @${username}: ${error}`);
       }
@@ -168,96 +166,89 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   async removeChannel(username: string) {
     const chatId = this.usernameToChannelId.get(username);
     if (chatId) {
+      const dbId = this.chatIdToChannelId.get(chatId);
+      if (dbId) {
+        this.lastMessageIds.delete(dbId);
+        this.initializedChannels.delete(dbId);
+      }
       this.chatIdToChannelId.delete(chatId);
     }
     this.usernameToChannelId.delete(username);
     this.logger.log(`Unsubscribed from @${username}`);
   }
 
-  private setupMessageHandler() {
-    this.client.addEventHandler(
-      async (event: NewMessageEvent) => {
-        await this.handleNewMessage(event);
-      },
-      new NewMessage({}),
-    );
+  // ── Polling ────────────────────────────────────────────────────────────────
 
-    // Raw update handler — logs ANY update type to verify GramJS is receiving data
-    this.client.addEventHandler((update: any) => {
-      const typeName = update?.className ?? update?.constructor?.name ?? typeof update;
-      if (typeName && !typeName.includes('UpdateUserStatus') && !typeName.includes('Raw')) {
-        this.logger.debug(`[RAW UPDATE] ${typeName}`);
-      }
-    });
+  private startPolling() {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    // First pass initializes lastMessageIds without processing (avoids replaying old messages)
+    this.pollChannels().catch((e) => this.logger.error('Initial poll error', e));
+    this.pollTimer = setInterval(() => {
+      this.pollChannels().catch((e) => this.logger.error('Poll error', e));
+    }, 30_000);
+    this.logger.log('Channel polling started (30s interval)');
   }
 
-  private async handleNewMessage(event: NewMessageEvent) {
-    try {
-      const message = event.message;
-      const text = message.text;
-
-      // Log immediately so we know the handler fired even before getChat()
-      const rawPeerId = (message as any).peerId ?? (message as any).chatId;
-      this.logger.log(`[HANDLER] peerId=${JSON.stringify(rawPeerId)} text="${(text ?? '').slice(0, 40)}"`);
-
-      const chat = await message.getChat();
-      if (!chat) {
-        this.logger.warn(`[HANDLER] getChat() returned null for peerId=${JSON.stringify(rawPeerId)}`);
-        return;
-      }
-
-      const chatId = chat.id.toString();
-      const username = 'username' in chat ? '@' + (chat as any).username : chatId;
-
-      // Channels/supergroups may arrive with -100 prefixed ID in some GramJS versions
-      const chatIdAlt = chatId.startsWith('-100')
-        ? chatId.slice(4)
-        : `-100${chatId}`;
-      const dbChannelId =
-        this.chatIdToChannelId.get(chatId) ??
-        this.chatIdToChannelId.get(chatIdAlt);
-
-      this.logger.log(
-        `[MSG] chatId=${chatId} username=${username} matched=${!!dbChannelId} text="${(text ?? '').slice(0, 40)}"`,
-      );
-
-      if (!text || text.trim().length === 0) {
-        if (dbChannelId) {
-          this.logger.debug(`Media/empty message from ${username} — skipped (no text)`);
-        }
-        return;
-      }
-
-      this.logger.debug(
-        `Message from ${username}: "${text.slice(0, 60)}..."`,
-      );
-
-      if (!dbChannelId) {
-        this.logger.debug(`chatId=${chatId} not in subscribed list, skipping`);
-        return;
-      }
-
-      const channel = await this.prisma.telegramChannel.findUnique({
-        where: { id: dbChannelId },
-      });
-
-      if (!channel || !channel.isActive) {
-        return;
-      }
-
-      this.logger.log(
-        `Processing message from @${channel.channelUsername}: "${text.slice(0, 80)}"`,
-      );
-
-      await this.analysisService.analyzeMessage(
-        text,
-        channel.id,
-        BigInt(message.id),
-      );
-    } catch (error) {
-      this.logger.error('Error handling new message', error);
+  private async pollChannels() {
+    for (const [username, chatId] of this.usernameToChannelId.entries()) {
+      const dbChannelId = this.chatIdToChannelId.get(chatId);
+      if (!dbChannelId) continue;
+      await this.pollChannel(username, dbChannelId);
     }
   }
+
+  private async pollChannel(username: string, dbChannelId: string) {
+    try {
+      const firstPoll = !this.initializedChannels.has(dbChannelId);
+      const messages = await this.client.getMessages(username, {
+        limit: firstPoll ? 1 : 10,
+      });
+
+      if (!messages.length) {
+        this.initializedChannels.add(dbChannelId);
+        return;
+      }
+
+      const maxId = Math.max(...messages.map((m) => m.id));
+      const lastKnown = this.lastMessageIds.get(dbChannelId) ?? 0;
+
+      if (firstPoll) {
+        this.lastMessageIds.set(dbChannelId, maxId);
+        this.initializedChannels.add(dbChannelId);
+        this.logger.log(`[POLL] @${username} initialized at msg#${maxId}`);
+        return;
+      }
+
+      const newMessages = messages
+        .filter((m) => m.id > lastKnown && (m as any).message?.trim())
+        .reverse(); // oldest first
+
+      for (const msg of newMessages) {
+        const text = (msg as any).message as string;
+        this.logger.log(
+          `[POLL] @${username} msg#${msg.id}: "${text.slice(0, 80)}"`,
+        );
+        const channel = await this.prisma.telegramChannel.findUnique({
+          where: { id: dbChannelId },
+        });
+        if (channel?.isActive) {
+          await this.analysisService.analyzeMessage(
+            text,
+            dbChannelId,
+            BigInt(msg.id),
+          );
+        }
+      }
+
+      if (maxId > lastKnown) {
+        this.lastMessageIds.set(dbChannelId, maxId);
+      }
+    } catch (error) {
+      this.logger.error(`[POLL] Failed for @${username}: ${error}`);
+    }
+  }
+
+  // ── Status ─────────────────────────────────────────────────────────────────
 
   getStatus(): {
     connected: boolean;
