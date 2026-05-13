@@ -160,11 +160,15 @@ export class NotificationsService {
     this.gateway.sendToUser(full.userId, full);
 
     const messageText = full.message?.text ?? '';
-    const pushBody = `Внимание на ${full.locationMatch}. ${messageText}`.trim();
+    const isClear = (full as any).isClear ?? false;
+    const pushTitle = isClear ? '☀️ Чисто' : '⚠️ SignalBot';
+    const pushBody = isClear
+      ? `${full.locationMatch} — все спокійно`
+      : `Увага на ${full.locationMatch}. ${messageText}`.trim();
 
     this.pushService
       .sendPush(full.userId, {
-        title: 'SignalBot',
+        title: pushTitle,
         body: pushBody,
         data: { notificationId: full.id },
       })

@@ -10,6 +10,7 @@ import {
   Check,
   AlertTriangle,
   BarChart2,
+  Sun,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -172,10 +173,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           className={`flex cursor-pointer items-start gap-3 border-b border-gray-50 px-4 py-3 transition-colors hover:bg-gray-50 ${!n.isRead ? 'bg-blue-50/50' : ''}`}
                           onClick={() => { if (!n.isRead) markReadMutation.mutate(n.id); setBellOpen(false); }}
                         >
-                          <AlertTriangle className={`mt-0.5 h-4 w-4 flex-shrink-0 ${severityColor(n.severity)}`} />
+                          {(n as any).isClear ? (
+                            <Sun className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                          ) : (
+                            <AlertTriangle className={`mt-0.5 h-4 w-4 flex-shrink-0 ${severityColor(n.severity)}`} />
+                          )}
                           <div className="min-w-0 flex-1">
                             <div className="mb-0.5 flex items-center gap-1.5">
-                              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${(n as any).isClear ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                                 {n.locationMatch}
                               </span>
                               <span className="text-xs text-gray-400">

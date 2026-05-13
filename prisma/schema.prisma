@@ -33,17 +33,18 @@ enum Severity {
 }
 
 model User {
-  id               String         @id @default(uuid())
-  email            String         @unique
-  password         String
-  pushSubscription Json?
-  expoPushToken    String?
-  telegramChatId   String?
-  ttsEnabled       Boolean        @default(false)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  routes           Route[]
-  notifications    Notification[]
+  id                String         @id @default(uuid())
+  email             String         @unique
+  password          String
+  pushSubscription  Json?
+  expoPushToken     String?
+  telegramChatId    String?
+  ttsEnabled        Boolean        @default(false)
+  showClearAlerts   Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  routes            Route[]
+  notifications     Notification[]
 }
 
 model TelegramChannel {
@@ -64,6 +65,7 @@ model Message {
   locations         String[]         // extracted location names
   issueType         IssueType?
   severity          Severity         @default(MEDIUM)
+  isClear           Boolean          @default(false)
   analyzedAt        DateTime?
   createdAt         DateTime         @default(now())
   notifications     Notification[]
@@ -111,9 +113,11 @@ model Notification {
   locationMatch String    // which location triggered the match
   issueType     IssueType?
   severity      Severity  @default(MEDIUM)
+  isClear       Boolean   @default(false)
   isRead        Boolean   @default(false)
   createdAt     DateTime  @default(now())
 
   @@index([userId, isRead])
   @@index([createdAt])
+  @@index([isClear])
 }

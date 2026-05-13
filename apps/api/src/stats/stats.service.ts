@@ -36,7 +36,7 @@ export class StatsService {
         this.getLocationStats(userId),
         this.getDailyTimeline(userId),
         this.getHourlyDistribution(userId),
-        this.prisma.notification.count({ where: { userId } }),
+        this.prisma.notification.count({ where: { userId, isClear: false } }),
       ]);
 
     return {
@@ -58,7 +58,7 @@ export class StatsService {
         COUNT(CASE WHEN n."createdAt" >= NOW() - INTERVAL '30 days' THEN 1 END)::integer AS last30d,
         MAX(n."createdAt")            AS "lastAt"
       FROM "Route" r
-      LEFT JOIN "Notification" n ON n."routeId" = r.id
+      LEFT JOIN "Notification" n ON n."routeId" = r.id AND n."isClear" = false
       WHERE r."userId" = ${userId}
       GROUP BY r.id, r.name
       ORDER BY total DESC
@@ -79,6 +79,7 @@ export class StatsService {
       FROM "Notification" n
       JOIN "Route" r ON r.id = n."routeId"
       WHERE r."userId" = ${userId}
+        AND n."isClear" = false
       GROUP BY n."locationMatch"
       ORDER BY count DESC
       LIMIT 20
@@ -90,13 +91,14 @@ export class StatsService {
     const rows = await this.prisma.$queryRaw<DayRow[]>`
       SELECT
         TO_CHAR(
-          n."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Kiev',
+          n."createdAt" + INTERVAL '3 hours',
           'YYYY-MM-DD'
         ) AS date,
         COUNT(n.id)::integer AS count
       FROM "Notification" n
       JOIN "Route" r ON r.id = n."routeId"
       WHERE r."userId" = ${userId}
+        AND n."isClear" = false
         AND n."createdAt" >= NOW() - INTERVAL '30 days'
       GROUP BY date
       ORDER BY date ASC
@@ -107,11 +109,12 @@ export class StatsService {
   private async getHourlyDistribution(userId: string): Promise<HourRow[]> {
     const rows = await this.prisma.$queryRaw<HourRow[]>`
       SELECT
-        EXTRACT(HOUR FROM n."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Kiev')::integer AS hour,
+        EXTRACT(HOUR FROM n."createdAt" + INTERVAL '3 hours')::integer AS hour,
         COUNT(n.id)::integer AS count
       FROM "Notification" n
       JOIN "Route" r ON r.id = n."routeId"
       WHERE r."userId" = ${userId}
+        AND n."isClear" = false
       GROUP BY hour
       ORDER BY hour ASC
     `;

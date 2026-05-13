@@ -12,6 +12,7 @@ import {
   Bell,
   Watch,
   Send,
+  Sun,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -49,6 +50,16 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       toast.success('Налаштування оновлено');
       window.location.reload();
+    },
+    onError: () => toast.error('Помилка оновлення'),
+  });
+
+  const toggleClearAlertsMutation = useMutation({
+    mutationFn: (showClearAlerts: boolean) =>
+      client.patch('/api/auth/me', { showClearAlerts }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      toast.success('Налаштування оновлено');
     },
     onError: () => toast.error('Помилка оновлення'),
   });
@@ -134,6 +145,30 @@ export function SettingsPage() {
             >
               {user?.ttsEnabled ? (
                 <ToggleRight className="h-6 w-6 text-green-500" />
+              ) : (
+                <ToggleLeft className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <Sun className={`h-5 w-5 ${profile?.showClearAlerts ? 'text-amber-400' : 'text-gray-400'}`} />
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  Сповіщення «чисто / пусто»
+                </p>
+                <p className="text-xs text-gray-500">
+                  Отримувати сигнали коли ситуація спокійна (не входять до статистики)
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => toggleClearAlertsMutation.mutate(!profile?.showClearAlerts)}
+              className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+            >
+              {profile?.showClearAlerts ? (
+                <ToggleRight className="h-6 w-6 text-amber-400" />
               ) : (
                 <ToggleLeft className="h-6 w-6" />
               )}

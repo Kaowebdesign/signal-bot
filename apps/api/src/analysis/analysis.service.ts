@@ -11,8 +11,25 @@ export interface AnalyzedMessage {
   text: string;
   issueType: IssueType;
   severity: Severity;
+  isClear: boolean;
   analyzedAt: Date;
 }
+
+// Words/emojis that indicate "all clear" (no problem, safe to travel)
+const CLEAR_KEYWORDS = [
+  'чисто',
+  'пусто',
+  'спокойно',
+  'спокійно',
+  'тихо',
+  'вільно',
+  'порожньо',
+  'немає нікого',
+  'нічого немає',
+  'все нормально',
+  'все чисто',
+];
+const CLEAR_EMOJIS = ['☀️', '🌞', '✅', '🟢', '😎'];
 
 const HIGH_SEVERITY_KEYWORDS = [
   'жесть',
@@ -51,6 +68,16 @@ export class AnalysisService {
       .trim();
   }
 
+  private detectClear(text: string, normalizedText: string): boolean {
+    for (const emoji of CLEAR_EMOJIS) {
+      if (text.includes(emoji)) return true;
+    }
+    for (const keyword of CLEAR_KEYWORDS) {
+      if (normalizedText.includes(keyword)) return true;
+    }
+    return false;
+  }
+
   private determineSeverity(normalizedText: string): Severity {
     for (const keyword of HIGH_SEVERITY_KEYWORDS) {
       if (normalizedText.includes(keyword)) {
@@ -76,10 +103,11 @@ export class AnalysisService {
 
     const issueType = classifyIssueType(normalizedText);
     const severity = this.determineSeverity(normalizedText);
+    const isClear = this.detectClear(text, normalizedText);
     const analyzedAt = new Date();
 
     this.logger.log(
-      `Analyzed message ${telegramMsgId}: type=${issueType}, severity=${severity}`,
+      `Analyzed message ${telegramMsgId}: type=${issueType}, severity=${severity}, isClear=${isClear}`,
     );
 
     const message = await this.prisma.message.upsert({
@@ -96,6 +124,7 @@ export class AnalysisService {
         locations: [],
         issueType,
         severity,
+        isClear,
         analyzedAt,
       },
       update: {
@@ -103,6 +132,7 @@ export class AnalysisService {
         locations: [],
         issueType,
         severity,
+        isClear,
         analyzedAt,
       },
     });
@@ -114,6 +144,7 @@ export class AnalysisService {
       text: message.text,
       issueType: issueType,
       severity: severity,
+      isClear,
       analyzedAt,
     };
 

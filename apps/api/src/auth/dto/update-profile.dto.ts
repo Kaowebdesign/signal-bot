@@ -4,4 +4,8 @@ export class UpdateProfileDto {
   @IsBoolean()
   @IsOptional()
   ttsEnabled?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  showClearAlerts?: boolean;
 }

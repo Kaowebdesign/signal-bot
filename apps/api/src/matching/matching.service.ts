@@ -90,7 +90,7 @@ export class MatchingService implements OnModuleInit {
 
   @OnEvent('message.analyzed')
   async matchMessage(message: AnalyzedMessage) {
-    const { id: messageId, issueType, severity, text } = message;
+    const { id: messageId, issueType, severity, isClear, text } = message;
 
     const normalizedText = this.normalizeLocationName(text);
     const matched = new Set<string>();
@@ -119,6 +119,20 @@ export class MatchingService implements OnModuleInit {
         matched.add(dedupKey);
 
         try {
+          // Skip clear-status notifications if user has disabled them
+          if (isClear) {
+            const user = await this.prisma.user.findUnique({
+              where: { id: entry.userId },
+              select: { showClearAlerts: true },
+            });
+            if (!user?.showClearAlerts) {
+              this.logger.debug(
+                `Skipping clear notification for user=${entry.userId} (showClearAlerts=false)`,
+              );
+              continue;
+            }
+          }
+
           const notification = await this.prisma.notification.create({
             data: {
               userId: entry.userId,
@@ -127,13 +141,14 @@ export class MatchingService implements OnModuleInit {
               locationMatch: indexKey,
               issueType,
               severity,
+              isClear,
             },
           });
 
           this.eventEmitter.emit('notification.created', notification);
 
           this.logger.log(
-            `Notification created: user=${entry.userId}, route=${entry.routeId}, location=${indexKey}`,
+            `Notification created: user=${entry.userId}, route=${entry.routeId}, location=${indexKey}, isClear=${isClear}`,
           );
         } catch (error) {
           this.logger.error(
