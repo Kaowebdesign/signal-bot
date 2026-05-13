@@ -6,6 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
+import * as Sentry from '@sentry/react';
 import * as authApi from '../api/auth';
 import type { User } from '../types';
 
@@ -28,9 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await authApi.getMe();
       setUser(me);
+      Sentry.setUser({ id: String(me.id), email: me.email });
     } catch {
       localStorage.removeItem('token');
       setUser(null);
+      Sentry.setUser(null);
     }
   }, []);
 
@@ -48,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', res.accessToken);
     const me = await authApi.getMe();
     setUser(me);
+    Sentry.setUser({ id: String(me.id), email: me.email });
   }, []);
 
   const register = useCallback(async (email: string, password: string) => {
@@ -55,11 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', res.accessToken);
     const me = await authApi.getMe();
     setUser(me);
+    Sentry.setUser({ id: String(me.id), email: me.email });
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     setUser(null);
+    Sentry.setUser(null);
   }, []);
 
   return (

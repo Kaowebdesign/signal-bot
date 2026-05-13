@@ -7,3 +7,4 @@ apps/web/.env
 .prisma
 .expo/
 apps/mobile/.expo/
+.env.sentry-build-plugin

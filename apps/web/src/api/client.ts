@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as Sentry from '@sentry/react';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '',
@@ -18,9 +19,19 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    if (status === 401) {
       localStorage.removeItem('token');
       window.location.href = '/login';
+    } else {
+      Sentry.captureException(error, {
+        extra: {
+          url: error.config?.url,
+          method: error.config?.method?.toUpperCase(),
+          status,
+          responseData: error.response?.data,
+        },
+      });
     }
     return Promise.reject(error);
   },

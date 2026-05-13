@@ -1,14 +1,20 @@
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), sentryVitePlugin({
+    org: "rilog",
+    project: "signal-bot"
+  })],
+
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
+
   server: {
     port: 5173,
     proxy: {
@@ -23,4 +29,8 @@ export default defineConfig({
       },
     },
   },
+
+  build: {
+    sourcemap: true
+  }
 });
