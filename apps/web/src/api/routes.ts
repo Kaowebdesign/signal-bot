@@ -18,7 +18,7 @@ export async function createRoute(dto: CreateRouteDto): Promise<Route> {
 
 export async function updateRoute(
   id: string,
-  dto: Partial<CreateRouteDto> & { isActive?: boolean },
+  dto: Partial<CreateRouteDto> & { isActive?: boolean; trackStats?: boolean },
 ): Promise<Route> {
   const { data } = await client.patch<Route>(`/api/routes/${id}`, dto);
   return data;

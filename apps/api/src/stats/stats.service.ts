@@ -29,6 +29,13 @@ export interface HourRow {
 export class StatsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Returns YYYY-MM-DD for current or past dates in Kyiv time (UTC+3)
+  private kyivDateStr(daysBack = 0): string {
+    const ms = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+    const kyiv = new Date(ms + 3 * 60 * 60 * 1000);
+    return kyiv.toISOString().slice(0, 10);
+  }
+
   async getStats(userId: string) {
     const [routeStats, locationStats, dailyTimeline, hourlyDistribution, total] =
       await Promise.all([
@@ -39,6 +46,12 @@ export class StatsService {
         this.prisma.notification.count({ where: { userId, isClear: false } }),
       ]);
 
+    // Save today's and yesterday's snapshots without blocking the response
+    Promise.all([
+      this.upsertSnapshot(userId, this.kyivDateStr(0)),
+      this.upsertSnapshot(userId, this.kyivDateStr(1)),
+    ]).catch(() => {});
+
     return {
       total,
       routeStats,
@@ -46,6 +59,88 @@ export class StatsService {
       dailyTimeline,
       hourlyDistribution,
     };
+  }
+
+  async getHistory(userId: string) {
+    return this.prisma.dailyStat.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take: 90,
+    });
+  }
+
+  async deleteStats(userId: string, from?: string, to?: string) {
+    const notifWhere: Record<string, unknown> = { userId };
+    const snapWhere: Record<string, unknown> = { userId };
+
+    if (from || to) {
+      const createdAt: Record<string, Date> = {};
+      if (from) createdAt.gte = new Date(`${from}T00:00:00.000+03:00`);
+      if (to) createdAt.lte = new Date(`${to}T23:59:59.999+03:00`);
+      notifWhere.createdAt = createdAt;
+
+      const dateFilter: Record<string, string> = {};
+      if (from) dateFilter.gte = from;
+      if (to) dateFilter.lte = to;
+      snapWhere.date = dateFilter;
+    }
+
+    const [notifications, snapshots] = await Promise.all([
+      this.prisma.notification.deleteMany({ where: notifWhere }),
+      this.prisma.dailyStat.deleteMany({ where: snapWhere }),
+    ]);
+
+    return { deletedNotifications: notifications.count, deletedSnapshots: snapshots.count };
+  }
+
+  private async upsertSnapshot(userId: string, date: string) {
+    const [countRows, routeRows, locRows] = await Promise.all([
+      this.prisma.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(n.id)::integer AS count
+        FROM "Notification" n
+        JOIN "Route" r ON r.id = n."routeId"
+        WHERE r."userId" = ${userId}
+          AND n."isClear" = false
+          AND r."trackStats" = true
+          AND TO_CHAR(n."createdAt" + INTERVAL '3 hours', 'YYYY-MM-DD') = ${date}
+      `,
+      this.prisma.$queryRaw<{ name: string }[]>`
+        SELECT r.name, COUNT(n.id)::integer AS cnt
+        FROM "Notification" n
+        JOIN "Route" r ON r.id = n."routeId"
+        WHERE r."userId" = ${userId}
+          AND n."isClear" = false
+          AND r."trackStats" = true
+          AND TO_CHAR(n."createdAt" + INTERVAL '3 hours', 'YYYY-MM-DD') = ${date}
+        GROUP BY r.name
+        ORDER BY cnt DESC
+        LIMIT 1
+      `,
+      this.prisma.$queryRaw<{ location: string }[]>`
+        SELECT n."locationMatch" AS location, COUNT(n.id)::integer AS cnt
+        FROM "Notification" n
+        JOIN "Route" r ON r.id = n."routeId"
+        WHERE r."userId" = ${userId}
+          AND n."isClear" = false
+          AND r."trackStats" = true
+          AND TO_CHAR(n."createdAt" + INTERVAL '3 hours', 'YYYY-MM-DD') = ${date}
+        GROUP BY n."locationMatch"
+        ORDER BY cnt DESC
+        LIMIT 1
+      `,
+    ]);
+
+    const data = {
+      totalCount: Number(countRows[0]?.count ?? 0),
+      topRouteName: routeRows[0]?.name ?? null,
+      topLocation: locRows[0]?.location ?? null,
+    };
+
+    await this.prisma.dailyStat.upsert({
+      where: { userId_date: { userId, date } },
+      create: { userId, date, ...data },
+      update: data,
+    });
   }
 
   private async getRouteStats(userId: string): Promise<RouteStatRow[]> {
@@ -60,6 +155,7 @@ export class StatsService {
       FROM "Route" r
       LEFT JOIN "Notification" n ON n."routeId" = r.id AND n."isClear" = false
       WHERE r."userId" = ${userId}
+        AND r."trackStats" = true
       GROUP BY r.id, r.name
       ORDER BY total DESC
     `;
@@ -80,6 +176,7 @@ export class StatsService {
       JOIN "Route" r ON r.id = n."routeId"
       WHERE r."userId" = ${userId}
         AND n."isClear" = false
+        AND r."trackStats" = true
       GROUP BY n."locationMatch"
       ORDER BY count DESC
       LIMIT 20
@@ -99,6 +196,7 @@ export class StatsService {
       JOIN "Route" r ON r.id = n."routeId"
       WHERE r."userId" = ${userId}
         AND n."isClear" = false
+        AND r."trackStats" = true
         AND n."createdAt" >= NOW() - INTERVAL '30 days'
       GROUP BY date
       ORDER BY date ASC
@@ -115,6 +213,7 @@ export class StatsService {
       JOIN "Route" r ON r.id = n."routeId"
       WHERE r."userId" = ${userId}
         AND n."isClear" = false
+        AND r."trackStats" = true
       GROUP BY hour
       ORDER BY hour ASC
     `;

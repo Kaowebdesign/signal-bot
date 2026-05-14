@@ -13,6 +13,7 @@ import {
   Pencil,
   X,
   Check,
+  BarChart2,
 } from 'lucide-react';
 import { getRoutes, createRoute, deleteRoute, updateRoute } from '../api/routes';
 import type { CreateRouteDto, LocationType, Route } from '../types';
@@ -136,11 +137,13 @@ function RouteForm({
 function RouteCard({
   route,
   onToggle,
+  onToggleStats,
   onDelete,
   onEdit,
 }: {
   route: Route;
   onToggle: () => void;
+  onToggleStats: () => void;
   onDelete: () => void;
   onEdit: () => void;
 }) {
@@ -162,6 +165,14 @@ function RouteCard({
               }`}
             >
               {route.isActive ? 'Активний' : 'Вимк.'}
+            </span>
+            <span
+              className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                route.trackStats ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+              }`}
+              title={route.trackStats ? 'Статистика збирається' : 'Статистика вимкнена'}
+            >
+              Стат.
             </span>
           </div>
           {/* Locations row */}
@@ -191,6 +202,13 @@ function RouteCard({
             title="Редагувати"
           >
             <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onToggleStats}
+            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100"
+            title={route.trackStats ? 'Вимкнути збір статистики' : 'Увімкнути збір статистики'}
+          >
+            <BarChart2 className={`h-4 w-4 ${route.trackStats ? 'text-blue-500' : 'text-gray-300'}`} />
           </button>
           <button
             onClick={onToggle}
@@ -266,6 +284,12 @@ export function RoutesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['routes'] }),
   });
 
+  const toggleStatsMutation = useMutation({
+    mutationFn: ({ id, trackStats }: { id: string; trackStats: boolean }) =>
+      updateRoute(id, { trackStats }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['routes'] }),
+  });
+
   return (
     <div className="space-y-4">
       {/* Header — compact on mobile */}
@@ -326,6 +350,7 @@ export function RoutesPage() {
                 key={route.id}
                 route={route}
                 onToggle={() => toggleMutation.mutate({ id: route.id, isActive: !route.isActive })}
+                onToggleStats={() => toggleStatsMutation.mutate({ id: route.id, trackStats: !route.trackStats })}
                 onDelete={() => {
                   if (confirm('Видалити маршрут?')) deleteMutation.mutate(route.id);
                 }}

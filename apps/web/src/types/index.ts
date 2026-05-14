@@ -14,8 +14,17 @@ export interface Route {
   userId: string;
   name: string;
   isActive: boolean;
+  trackStats: boolean;
   createdAt: string;
   locations: RouteLocation[];
+}
+
+export interface DailyStat {
+  id: string;
+  date: string;
+  totalCount: number;
+  topRouteName: string | null;
+  topLocation: string | null;
 }
 
 export interface RouteLocation {

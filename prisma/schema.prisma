@@ -45,6 +45,7 @@ model User {
   updatedAt         DateTime       @updatedAt
   routes            Route[]
   notifications     Notification[]
+  dailyStats        DailyStat[]
 }
 
 model TelegramChannel {
@@ -81,11 +82,25 @@ model Route {
   userId        String
   name          String
   isActive      Boolean         @default(true)
+  trackStats    Boolean         @default(true)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   locations     RouteLocation[]
   notifications Notification[]
 
+  @@index([userId])
+}
+
+model DailyStat {
+  id           String  @id @default(uuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         String  // YYYY-MM-DD (Kyiv time, UTC+3)
+  totalCount   Int     @default(0)
+  topRouteName String?
+  topLocation  String?
+
+  @@unique([userId, date])
   @@index([userId])
 }
 

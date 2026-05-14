@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AreaChart,
   Area,
@@ -10,24 +11,31 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { BarChart2, TrendingUp, MapPin, Clock, AlertTriangle } from 'lucide-react';
-import { getStats } from '../api/stats';
+import { BarChart2, TrendingUp, MapPin, Clock, AlertTriangle, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { getStats, getStatsHistory, deleteStats } from '../api/stats';
 
-// Fill in missing days in the last 30 days with 0
+// Local date string YYYY-MM-DD (matches backend UTC+3 offset)
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function fillDailyTimeline(data: { date: string; count: number }[]) {
   const map = new Map(data.map((d) => [d.date, d.count]));
   const days: { date: string; label: string; count: number }[] = [];
   for (let i = 29; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const iso = d.toISOString().slice(0, 10);
+    const iso = localDateStr(d);
     const label = d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
     days.push({ date: iso, label, count: map.get(iso) ?? 0 });
   }
   return days;
 }
 
-// Fill all 24 hours with 0 for missing ones
 function fillHourly(data: { hour: number; count: number }[]) {
   const map = new Map(data.map((d) => [d.hour, d.count]));
   return Array.from({ length: 24 }, (_, h) => ({
@@ -78,10 +86,96 @@ const tooltipStyle = {
   },
 };
 
+function ResetModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [mode, setMode] = useState<'all' | 'range'>('all');
+
+  const mutation = useMutation({
+    mutationFn: () => deleteStats(mode === 'range' ? from || undefined : undefined, mode === 'range' ? to || undefined : undefined),
+    onSuccess: (data) => {
+      toast.success(`Видалено ${data.deletedNotifications} сповіщень і ${data.deletedSnapshots} знімків`);
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['stats-history'] });
+      onClose();
+    },
+    onError: () => toast.error('Помилка видалення'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Скинути статистику</h2>
+          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mb-4 flex gap-2">
+          <button
+            className={`flex-1 rounded-lg py-1.5 text-sm font-medium ${mode === 'all' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}
+            onClick={() => setMode('all')}
+          >
+            Всю
+          </button>
+          <button
+            className={`flex-1 rounded-lg py-1.5 text-sm font-medium ${mode === 'range' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
+            onClick={() => setMode('range')}
+          >
+            За період
+          </button>
+        </div>
+
+        {mode === 'range' && (
+          <div className="mb-4 space-y-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">З</label>
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input-field" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">По</label>
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input-field" />
+            </div>
+          </div>
+        )}
+
+        <p className="mb-4 text-xs text-gray-500">
+          {mode === 'all'
+            ? 'Будуть видалені всі сповіщення та щоденні знімки. Дію неможливо скасувати.'
+            : 'Будуть видалені сповіщення та знімки за вибраний діапазон дат.'}
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || (mode === 'range' && !from && !to)}
+          >
+            {mutation.isPending ? 'Видалення...' : 'Видалити'}
+          </button>
+          <button className="flex-1 rounded-lg bg-gray-100 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200" onClick={onClose}>
+            Скасувати
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function StatsPage() {
+  const [showReset, setShowReset] = useState(false);
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ['stats'],
     queryFn: getStats,
+    staleTime: 60_000,
+  });
+
+  const { data: history = [] } = useQuery({
+    queryKey: ['stats-history'],
+    queryFn: getStatsHistory,
     staleTime: 60_000,
   });
 
@@ -105,29 +199,29 @@ export function StatsPage() {
   const hourly = fillHourly(stats.hourlyDistribution);
   const topRoute = stats.routeStats[0];
   const topLocation = stats.locationStats[0];
-
-  // Best travel window: find 3-hour block with fewest alerts
   const hourlyMax = Math.max(...hourly.map((h) => h.count), 1);
-
-  // Today's date in YYYY-MM-DD
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDateStr(new Date());
   const todayCount = stats.dailyTimeline.find((d) => d.date === todayKey)?.count ?? 0;
 
   return (
     <div className="space-y-4 lg:space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Статистика</h1>
-        <p className="mt-1 text-sm text-gray-500">Аналіз перехоплених повідомлень</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Статистика</h1>
+          <p className="mt-1 text-sm text-gray-500">Аналіз перехоплених повідомлень</p>
+        </div>
+        <button
+          onClick={() => setShowReset(true)}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50"
+        >
+          <Trash2 className="h-4 w-4" />
+          <span className="hidden sm:inline">Скинути</span>
+        </button>
       </div>
 
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        <MetricCard
-          icon={BarChart2}
-          label="Всього сповіщень"
-          value={stats.total}
-          color="blue"
-        />
+        <MetricCard icon={BarChart2} label="Всього сповіщень" value={stats.total} color="blue" />
         <MetricCard
           icon={TrendingUp}
           label="Сьогодні"
@@ -163,12 +257,7 @@ export function StatsPage() {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 10 }}
-              interval="preserveStartEnd"
-              tickLine={false}
-            />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" tickLine={false} />
             <YAxis tick={{ fontSize: 10 }} allowDecimals={false} tickLine={false} />
             <Tooltip
               {...tooltipStyle}
@@ -190,7 +279,6 @@ export function StatsPage() {
 
       {/* ── Route stats + locations ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Routes */}
         <div className="card">
           <h2 className="mb-4 text-sm font-semibold text-gray-700">Маршрути за кількістю сповіщень</h2>
           {stats.routeStats.length === 0 ? (
@@ -203,16 +291,13 @@ export function StatsPage() {
                 return (
                   <div key={r.id}>
                     <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="font-medium text-gray-700 truncate mr-2">{r.name}</span>
+                      <span className="mr-2 truncate font-medium text-gray-700">{r.name}</span>
                       <span className="flex-shrink-0 text-gray-500">
                         {r.total} · 7д: {r.last7d} · 30д: {r.last30d}
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                      <div
-                        className="h-full rounded-full bg-blue-500 transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
+                      <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -221,7 +306,6 @@ export function StatsPage() {
           )}
         </div>
 
-        {/* Top locations */}
         <div className="card">
           <h2 className="mb-4 text-sm font-semibold text-gray-700">Топ локацій</h2>
           {stats.locationStats.length === 0 ? (
@@ -236,31 +320,18 @@ export function StatsPage() {
                   <div key={loc.location} className="flex items-center gap-2">
                     <span
                       className={`w-5 flex-shrink-0 text-center text-xs font-bold ${
-                        rank === 1
-                          ? 'text-red-500'
-                          : rank === 2
-                            ? 'text-orange-400'
-                            : rank === 3
-                              ? 'text-yellow-400'
-                              : 'text-gray-300'
+                        rank === 1 ? 'text-red-500' : rank === 2 ? 'text-orange-400' : rank === 3 ? 'text-yellow-400' : 'text-gray-300'
                       }`}
                     >
                       {rank}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="truncate text-xs font-medium text-gray-700">
-                          {loc.location}
-                        </span>
-                        <span className="ml-2 flex-shrink-0 text-xs text-gray-400">
-                          {loc.count}
-                        </span>
+                        <span className="truncate text-xs font-medium text-gray-700">{loc.location}</span>
+                        <span className="ml-2 flex-shrink-0 text-xs text-gray-400">{loc.count}</span>
                       </div>
                       <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-gray-100">
-                        <div
-                          className="h-full rounded-full bg-orange-400"
-                          style={{ width: `${pct}%` }}
-                        />
+                        <div className="h-full rounded-full bg-orange-400" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   </div>
@@ -283,82 +354,79 @@ export function StatsPage() {
         <ResponsiveContainer width="100%" height={160}>
           <BarChart data={hourly} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 9 }}
-              tickLine={false}
-              interval={3}
-            />
+            <XAxis dataKey="label" tick={{ fontSize: 9 }} tickLine={false} interval={3} />
             <YAxis tick={{ fontSize: 10 }} allowDecimals={false} tickLine={false} />
             <Tooltip
               {...tooltipStyle}
               formatter={(v) => [v, 'Сповіщень']}
               labelFormatter={(l) => `Час: ${l}`}
             />
-            <Bar
-              dataKey="count"
-              radius={[3, 3, 0, 0]}
-              maxBarSize={24}
-              fill="#f97316"
-            >
+            <Bar dataKey="count" radius={[3, 3, 0, 0]} maxBarSize={24} fill="#f97316">
               {hourly.map((entry) => {
                 const intensity = hourlyMax > 0 ? entry.count / hourlyMax : 0;
-                const color =
-                  intensity > 0.7
-                    ? '#ef4444'
-                    : intensity > 0.4
-                      ? '#f97316'
-                      : intensity > 0.1
-                        ? '#fbbf24'
-                        : '#e5e7eb';
+                const color = intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f97316' : intensity > 0.1 ? '#fbbf24' : '#e5e7eb';
                 return <rect key={entry.hour} fill={color} />;
               })}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
         <div className="mt-3 flex items-center justify-end gap-3 text-[10px] text-gray-400">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-red-500" /> Висока активність
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-amber-400" /> Середня
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-gray-200" /> Тихо
-          </span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-red-500" /> Висока активність</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-amber-400" /> Середня</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-gray-200" /> Тихо</span>
         </div>
       </div>
 
-      {/* ── Last 7 days per route (mini chart) ── */}
+      {/* ── Last 7 days per route ── */}
       {stats.routeStats.length > 0 && (
         <div className="card">
-          <h2 className="mb-4 text-sm font-semibold text-gray-700">
-            Порівняння маршрутів (останні 7 днів)
-          </h2>
+          <h2 className="mb-4 text-sm font-semibold text-gray-700">Порівняння маршрутів (останні 7 днів)</h2>
           <ResponsiveContainer width="100%" height={160}>
-            <BarChart
-              data={stats.routeStats}
-              margin={{ top: 4, right: 4, left: -20, bottom: 40 }}
-            >
+            <BarChart data={stats.routeStats} margin={{ top: 4, right: 4, left: -20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                angle={-20}
-                textAnchor="end"
-                interval={0}
-              />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} angle={-20} textAnchor="end" interval={0} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} tickLine={false} />
-              <Tooltip
-                {...tooltipStyle}
-                formatter={(v) => [v, 'За 7 днів']}
-              />
+              <Tooltip {...tooltipStyle} formatter={(v) => [v, 'За 7 днів']} />
               <Bar dataKey="last7d" name="7 днів" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* ── Daily history snapshots ── */}
+      {history.length > 0 && (
+        <div className="card">
+          <h2 className="mb-4 text-sm font-semibold text-gray-700">Щоденна статистика</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-500">
+                  <th className="pb-2 pr-4 text-left font-medium">Дата</th>
+                  <th className="pb-2 pr-4 text-right font-medium">Сповіщень</th>
+                  <th className="pb-2 pr-4 text-left font-medium">Проблемний маршрут</th>
+                  <th className="pb-2 text-left font-medium">Гаряча точка</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((day) => (
+                  <tr key={day.date} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2 pr-4 font-medium text-gray-700">{day.date}</td>
+                    <td className="py-2 pr-4 text-right">
+                      <span className={`font-semibold ${day.totalCount > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {day.totalCount}
+                      </span>
+                    </td>
+                    <td className="max-w-[140px] truncate py-2 pr-4 text-gray-600">{day.topRouteName ?? '—'}</td>
+                    <td className="max-w-[140px] truncate py-2 text-gray-600">{day.topLocation ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {showReset && <ResetModal onClose={() => setShowReset(false)} />}
     </div>
   );
 }

@@ -84,6 +84,9 @@ export class RoutesService {
     if (dto.isActive !== undefined) {
       data.isActive = dto.isActive;
     }
+    if (dto.trackStats !== undefined) {
+      data.trackStats = dto.trackStats;
+    }
 
     if (dto.locations !== undefined) {
       // Replace all locations: delete existing, create new

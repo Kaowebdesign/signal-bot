@@ -6,4 +6,8 @@ export class UpdateRouteDto extends PartialType(CreateRouteDto) {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  trackStats?: boolean;
 }
