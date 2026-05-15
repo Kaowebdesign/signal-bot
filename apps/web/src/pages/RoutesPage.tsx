@@ -157,17 +157,17 @@ function RouteCard({
       {/* Top row */}
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900 truncate">{route.name}</span>
+          <span className="block font-semibold text-gray-900">{route.name}</span>
+          <div className="mt-1 flex items-center gap-1">
             <span
-              className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 route.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
               }`}
             >
               {route.isActive ? 'Активний' : 'Вимк.'}
             </span>
             <span
-              className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 route.trackStats ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
               }`}
               title={route.trackStats ? 'Статистика збирається' : 'Статистика вимкнена'}

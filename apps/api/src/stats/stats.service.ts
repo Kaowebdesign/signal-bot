@@ -29,7 +29,6 @@ export interface HourRow {
 export class StatsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Returns YYYY-MM-DD for current or past dates in Kyiv time (UTC+3)
   private kyivDateStr(daysBack = 0): string {
     const ms = Date.now() - daysBack * 24 * 60 * 60 * 1000;
     const kyiv = new Date(ms + 3 * 60 * 60 * 1000);
@@ -37,28 +36,23 @@ export class StatsService {
   }
 
   async getStats(userId: string) {
-    const [routeStats, locationStats, dailyTimeline, hourlyDistribution, total] =
-      await Promise.all([
-        this.getRouteStats(userId),
-        this.getLocationStats(userId),
-        this.getDailyTimeline(userId),
-        this.getHourlyDistribution(userId),
-        this.prisma.notification.count({ where: { userId, isClear: false } }),
-      ]);
+    // Run live queries in parallel with backfill
+    const [routeStats, locationStats, hourlyDistribution, total] = await Promise.all([
+      this.getRouteStats(userId),
+      this.getLocationStats(userId),
+      this.getHourlyDistribution(userId),
+      this.prisma.notification.count({ where: { userId, isClear: false } }),
+    ]);
 
-    // Save today's and yesterday's snapshots without blocking the response
-    Promise.all([
-      this.upsertSnapshot(userId, this.kyivDateStr(0)),
-      this.upsertSnapshot(userId, this.kyivDateStr(1)),
-    ]).catch(() => {});
+    // Ensure DailyStat is populated for last 30 days before reading timeline.
+    // Past days: created only once (never overwritten after saved).
+    // Today: always updated with live data.
+    await this.backfillSnapshots(userId);
 
-    return {
-      total,
-      routeStats,
-      locationStats,
-      dailyTimeline,
-      hourlyDistribution,
-    };
+    // Read timeline from DailyStat — not affected by notification deletions
+    const dailyTimeline = await this.getDailyTimeline(userId);
+
+    return { total, routeStats, locationStats, dailyTimeline, hourlyDistribution };
   }
 
   async getHistory(userId: string) {
@@ -93,7 +87,31 @@ export class StatsService {
     return { deletedNotifications: notifications.count, deletedSnapshots: snapshots.count };
   }
 
-  private async upsertSnapshot(userId: string, date: string) {
+  // Ensure snapshots exist for all 30 days.
+  // Past days are created once and never overwritten.
+  // Today is always refreshed.
+  private async backfillSnapshots(userId: string): Promise<void> {
+    const today = this.kyivDateStr(0);
+    const pastDates = Array.from({ length: 29 }, (_, i) => this.kyivDateStr(i + 1));
+
+    // Find which past dates already have a snapshot
+    const existing = await this.prisma.dailyStat.findMany({
+      where: { userId, date: { in: pastDates } },
+      select: { date: true },
+    });
+    const existingSet = new Set(existing.map((s) => s.date));
+
+    const missingPast = pastDates.filter((d) => !existingSet.has(d));
+
+    await Promise.all([
+      // Create missing past snapshots (fire once, never overwrite)
+      ...missingPast.map((d) => this.upsertSnapshot(userId, d)),
+      // Today is always refreshed
+      this.upsertSnapshot(userId, today),
+    ]);
+  }
+
+  private async upsertSnapshot(userId: string, date: string): Promise<void> {
     const [countRows, routeRows, locRows] = await Promise.all([
       this.prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(n.id)::integer AS count
@@ -143,6 +161,17 @@ export class StatsService {
     });
   }
 
+  // Reads from DailyStat — immune to notification deletions
+  private async getDailyTimeline(userId: string): Promise<DayRow[]> {
+    const oldest = this.kyivDateStr(29);
+    const rows = await this.prisma.dailyStat.findMany({
+      where: { userId, date: { gte: oldest } },
+      select: { date: true, totalCount: true },
+      orderBy: { date: 'asc' },
+    });
+    return rows.map((r) => ({ date: r.date, count: r.totalCount }));
+  }
+
   private async getRouteStats(userId: string): Promise<RouteStatRow[]> {
     const rows = await this.prisma.$queryRaw<RouteStatRow[]>`
       SELECT
@@ -180,26 +209,6 @@ export class StatsService {
       GROUP BY n."locationMatch"
       ORDER BY count DESC
       LIMIT 20
-    `;
-    return rows.map((r) => ({ ...r, count: Number(r.count) }));
-  }
-
-  private async getDailyTimeline(userId: string): Promise<DayRow[]> {
-    const rows = await this.prisma.$queryRaw<DayRow[]>`
-      SELECT
-        TO_CHAR(
-          n."createdAt" + INTERVAL '3 hours',
-          'YYYY-MM-DD'
-        ) AS date,
-        COUNT(n.id)::integer AS count
-      FROM "Notification" n
-      JOIN "Route" r ON r.id = n."routeId"
-      WHERE r."userId" = ${userId}
-        AND n."isClear" = false
-        AND r."trackStats" = true
-        AND n."createdAt" >= NOW() - INTERVAL '30 days'
-      GROUP BY date
-      ORDER BY date ASC
     `;
     return rows.map((r) => ({ ...r, count: Number(r.count) }));
   }
