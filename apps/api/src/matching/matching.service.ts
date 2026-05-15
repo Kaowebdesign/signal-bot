@@ -6,6 +6,7 @@ import { AnalyzedMessage } from '../analysis/analysis.service';
 interface IndexEntry {
   routeId: string;
   userId: string;
+  isActive: boolean; // false → store notification for stats but skip push/socket alerts
 }
 
 @Injectable()
@@ -37,9 +38,8 @@ export class MatchingService implements OnModuleInit {
   async rebuildIndex() {
     const routeLocations = await this.prisma.routeLocation.findMany({
       where: {
-        route: {
-          isActive: true,
-        },
+        // Include: active routes (full alerts) OR inactive routes that still track stats (silent)
+        route: { OR: [{ isActive: true }, { trackStats: true }] },
       },
       select: {
         nameNorm: true,
@@ -47,6 +47,7 @@ export class MatchingService implements OnModuleInit {
         route: {
           select: {
             userId: true,
+            isActive: true,
           },
         },
       },
@@ -59,6 +60,7 @@ export class MatchingService implements OnModuleInit {
       const entry: IndexEntry = {
         routeId: rl.routeId,
         userId: rl.route.userId,
+        isActive: rl.route.isActive,
       };
 
       const existing = newIndex.get(key);
@@ -145,7 +147,11 @@ export class MatchingService implements OnModuleInit {
             },
           });
 
-          this.eventEmitter.emit('notification.created', notification);
+          // Only send push/socket alerts for active routes.
+          // Inactive routes with trackStats=true still get a notification record (for stats) but silently.
+          if (entry.isActive) {
+            this.eventEmitter.emit('notification.created', notification);
+          }
 
           this.logger.log(
             `Notification created: user=${entry.userId}, route=${entry.routeId}, location=${indexKey}, isClear=${isClear}`,
